@@ -1,21 +1,5 @@
 [
   {
-    "timestamp": "01 February 2026 15:10:59",
-    "message": "hamza: hello"
-  },
-  {
-    "timestamp": "01 February 2026 15:12:41",
-    "message": "🚀 alice joined the chat!"
-  },
-  {
-    "timestamp": "01 February 2026 15:12:43",
-    "message": "alice: test"
-  },
-  {
-    "timestamp": "01 February 2026 15:16:47",
-    "message": "🚀 hamza joined the chat!"
-  },
-  {
     "timestamp": "01 February 2026 15:19:21",
     "message": "🚀 hamza joined the chat!"
   },
@@ -398,5 +382,21 @@
   {
     "timestamp": "12 February 2026 19:49:48",
     "message": "latifa: hujhujhik"
+  },
+  {
+    "timestamp": "12 February 2026 19:52:30",
+    "message": "🚀 hamza joined the chat!"
+  },
+  {
+    "timestamp": "12 February 2026 19:52:32",
+    "message": "🚀 latifa joined the chat!"
+  },
+  {
+    "timestamp": "12 February 2026 19:52:37",
+    "message": "👋 latifa left the chat"
+  },
+  {
+    "timestamp": "12 February 2026 19:53:20",
+    "message": "🚀 latifa joined the chat!"
   }
 ]
