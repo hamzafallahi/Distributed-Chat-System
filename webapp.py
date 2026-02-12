@@ -43,11 +43,15 @@ class ClientBridge:
         self.transfer_event.set()
         self.users = []
         self.users_lock = threading.Lock()
+        self.session_id = None
 
     # ── helpers ──
-    def _add(self, mtype, content):
+    def _add(self, mtype, content, extra=None):
         with self.msg_lock:
-            self.messages.append({"id": len(self.messages), "type": mtype, "content": content})
+            entry = {"id": len(self.messages), "type": mtype, "content": content}
+            if extra:
+                entry.update(extra)
+            self.messages.append(entry)
 
     def get_messages(self, since=0):
         with self.msg_lock:
@@ -147,10 +151,18 @@ class ClientBridge:
                 if not self.running:
                     break
                 try:
-                    msg = self.sock.recv(4096).decode('utf-8')
+                    raw = self.sock.recv(4096)
                 except socket.timeout:
                     continue
-                if msg:
+                if raw:
+                    # Check for incoming peer-to-peer file transfer (binary)
+                    if raw.startswith(b"[FILE]INCOMING|"):
+                        self._receive_file(raw)
+                        continue
+                    try:
+                        msg = raw.decode('utf-8')
+                    except UnicodeDecodeError:
+                        continue
                     self._update_users(msg)
                     # skip file-protocol noise
                     if msg.startswith("[FILE]"):
@@ -166,6 +178,91 @@ class ClientBridge:
                     self.running = False
                     self._add("system", "Connection lost")
                 break
+
+    # ── receive file from another client ──
+    def _receive_file(self, initial_data):
+        """Handle incoming file from another client (relayed by server)."""
+        try:
+            nl = initial_data.find(b'\n')
+            if nl == -1:
+                header_bytes = initial_data
+                leftover = b''
+            else:
+                header_bytes = initial_data[:nl]
+                leftover = initial_data[nl + 1:]
+
+            header = header_bytes.decode('utf-8')
+            parts = header.replace('[FILE]INCOMING|', '').split('|')
+            sender = parts[0]
+            filename = parts[1]
+            file_size = int(parts[2])
+
+            file_data = leftover
+            remaining = file_size - len(leftover)
+            while remaining > 0:
+                try:
+                    chunk = self.sock.recv(min(4096, remaining))
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                file_data += chunk
+                remaining -= len(chunk)
+
+            save_dir = os.path.join(BASE_DIR, 'received_files', self.session_id or 'default')
+            os.makedirs(save_dir, exist_ok=True)
+            safe_name = f"{sender}_{filename}"
+            save_path = os.path.join(save_dir, safe_name)
+            with open(save_path, 'wb') as f:
+                f.write(file_data)
+
+            from urllib.parse import quote
+            download_url = f"/api/client/download?session={self.session_id}&file={quote(safe_name)}"
+            self._add("file_received",
+                       f"\U0001f4e5 {sender} sent you a file: {filename}",
+                       {"download_url": download_url, "filename": filename, "sender": sender})
+
+        except Exception as e:
+            self._add("system", f"\u274c Error receiving file: {e}")
+
+    # ── send file to specific user ──
+    def send_file_to_user(self, target_user, filename, file_data):
+        """Send a file to a specific user via the server relay."""
+        if not self.running:
+            return False, "Not connected"
+
+        self.transfer_event.clear()
+        time.sleep(0.6)
+
+        try:
+            self.sock.send(f"/sendfile {target_user} {filename}".encode('utf-8'))
+
+            resp = self._recv_wait()
+            if resp.startswith("[FILE]\u274c"):
+                return False, resp[6:]
+            if resp != "[FILE]SENDFILE_READY":
+                return False, f"Unexpected response: {resp}"
+
+            self.sock.send(str(len(file_data)).encode('utf-8'))
+
+            ack = self._recv_wait()
+            if ack != "[FILE]FILE_SIZE_OK":
+                return False, "Server did not acknowledge file size"
+
+            sent = 0
+            while sent < len(file_data):
+                end = min(sent + 4096, len(file_data))
+                self.sock.send(file_data[sent:end])
+                sent = end
+
+            confirm = self._recv_wait()
+            result = confirm[6:] if confirm.startswith("[FILE]") else confirm
+            self._add("system", result)
+            return True, result
+        except Exception as e:
+            return False, str(e)
+        finally:
+            self.transfer_event.set()
 
     # ── send text ──
     def send(self, message):
@@ -369,6 +466,7 @@ def api_client_connect():
     )
     if ok:
         session_id = str(uuid.uuid4())
+        bridge.session_id = session_id
         with client_bridges_lock:
             client_bridges[session_id] = bridge
         return jsonify(success=True, message=msg, nickname=bridge.nickname, session=session_id)
@@ -432,6 +530,34 @@ def api_client_disconnect():
         if bridge:
             bridge.disconnect()
     return jsonify(success=True)
+
+
+@app.route('/api/client/sendfile', methods=['POST'])
+def api_client_sendfile():
+    sid = request.form.get('session') or request.args.get('session')
+    bridge = _get_client(sid)
+    if not bridge or not bridge.running:
+        return jsonify(success=False, message="Not connected")
+    target = request.form.get('target')
+    if not target:
+        return jsonify(success=False, message="No target user specified")
+    f = request.files.get('file')
+    if not f:
+        return jsonify(success=False, message="No file provided")
+    ok, msg = bridge.send_file_to_user(target, f.filename, f.read())
+    return jsonify(success=ok, message=msg)
+
+
+@app.route('/api/client/download')
+def api_client_download():
+    sid = request.args.get('session')
+    filename = request.args.get('file')
+    if not sid or not filename:
+        return jsonify(success=False, message="Missing parameters"), 400
+    safe_dir = os.path.join(BASE_DIR, 'received_files', sid)
+    if not os.path.exists(os.path.join(safe_dir, filename)):
+        return jsonify(success=False, message="File not found"), 404
+    return send_from_directory(safe_dir, filename, as_attachment=True)
 
 
 # ────── Server endpoints ──────

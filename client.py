@@ -105,22 +105,30 @@ class ChatClient:
                     break
                 
                 try:
-                    message = self.socket.recv(1024).decode('utf-8')
+                    raw_data = self.socket.recv(4096)
                 except socket.timeout:
                     # Timeout is expected, just loop and check event again
                     continue
                     
-                if message:
+                if raw_data:
+                    # Check for incoming peer-to-peer file transfer (binary)
+                    if raw_data.startswith(b"[FILE]INCOMING|"):
+                        self.receive_incoming_file(raw_data)
+                        continue
+                    
+                    # Decode as text for normal messages
+                    try:
+                        message = raw_data.decode('utf-8')
+                    except UnicodeDecodeError:
+                        continue
+                    
                     # Filter out file transfer protocol messages
                     if message.startswith("[FILE]"):
                         # Handle file transfer responses
                         if message == "[FILE]FILE_READY":
-                            # This shouldn't happen here, but just in case
                             pass
                         elif message.startswith("[FILE]✅") or message.startswith("[FILE]❌"):
-                            # File transfer result - display it
-                            print(f"\n{message[6:]}\nYou: ", end="")  # Remove [FILE] prefix
-                        # Don't display other file protocol messages
+                            print(f"\n{message[6:]}\nYou: ", end="")
                     else:
                         print(f"\n{message}\nYou: ", end="")
                         sys.stdout.flush()
@@ -162,6 +170,11 @@ class ChatClient:
                 elif message.startswith("/file "):
                     # Handle file transfer
                     self.send_file(message)
+                    continue
+                
+                elif message.startswith("/sendfile "):
+                    # Handle sending a file to a specific user
+                    self.send_file_to_user(message)
                     continue
                 
                 # Send the message to the server
@@ -207,31 +220,21 @@ class ChatClient:
             time.sleep(0.6)  # Longer than socket timeout (0.5s)
             
             try:
-                # Send file command
-                self.socket.send(f"/file {filename}".encode('utf-8'))
-                
-                # Wait for ready signal (with timeout retry)
-                response = None
-                while not response:
-                    try:
-                        response = self.socket.recv(1024).decode('utf-8')
-                    except socket.timeout:
-                        continue
+                # Send file command and wait for response
+                self.socket.settimeout(5.0)  # Use longer timeout for handshake
+                self.socket.send(f"/file {filename}\n".encode('utf-8'))
+                response = self.socket.recv(1024).decode('utf-8').strip()
+                self.socket.settimeout(0.5)
                         
                 if response != "[FILE]FILE_READY":
                     print(f"❌ Server not ready: {response}")
                     return
                 
                 # Send file size
-                self.socket.send(str(file_size).encode('utf-8'))
-                
-                # Wait for acknowledgment (with timeout retry)
-                ack = None
-                while not ack:
-                    try:
-                        ack = self.socket.recv(1024).decode('utf-8')
-                    except socket.timeout:
-                        continue
+                self.socket.settimeout(5.0)
+                self.socket.send(f"{file_size}\n".encode('utf-8'))
+                ack = self.socket.recv(1024).decode('utf-8').strip()
+                self.socket.settimeout(0.5)
                         
                 if ack != "[FILE]FILE_SIZE_OK":
                     print("❌ Server did not acknowledge file size")
@@ -248,13 +251,10 @@ class ChatClient:
                         self.socket.send(chunk)
                         sent += len(chunk)
                 
-                # Wait for confirmation (with timeout retry)
-                confirm = None
-                while not confirm:
-                    try:
-                        confirm = self.socket.recv(1024).decode('utf-8')
-                    except socket.timeout:
-                        continue
+                # Wait for confirmation
+                self.socket.settimeout(5.0)
+                confirm = self.socket.recv(1024).decode('utf-8').strip()
+                self.socket.settimeout(0.5)
                         
                 if confirm.startswith("[FILE]"):
                     print(f"\n{confirm[6:]}\n")  # Remove [FILE] prefix
@@ -267,6 +267,131 @@ class ChatClient:
         except Exception as e:
             print(f"❌ Error sending file: {e}")
     
+    def send_file_to_user(self, command):
+        """Send a file to a specific user (relayed through the server)"""
+        try:
+            parts = command.split(" ", 2)
+            if len(parts) < 3:
+                print("❌ Usage: /sendfile <username> <filepath>")
+                return
+            
+            target_user = parts[1].strip()
+            filepath = parts[2].strip()
+            
+            if not os.path.exists(filepath):
+                print(f"❌ File not found: {filepath}")
+                return
+            
+            if not os.path.isfile(filepath):
+                print(f"❌ Not a file: {filepath}")
+                return
+            
+            filename = os.path.basename(filepath)
+            file_size = os.path.getsize(filepath)
+            
+            # Pause the receive thread during file transfer
+            self.receiving_allowed.clear()
+            time.sleep(0.6)
+            
+            try:
+                # Send command and wait for response in one blocking operation
+                self.socket.settimeout(5.0)  # Use longer timeout for initial handshake
+                self.socket.send(f"/sendfile {target_user} {filename}\n".encode('utf-8'))
+                
+                response = self.socket.recv(1024).decode('utf-8').strip()
+                self.socket.settimeout(0.5)  # Restore normal timeout
+                
+                if response.startswith("[FILE]❌"):
+                    print(f"\n{response[6:]}")
+                    return
+                
+                if response != "[FILE]SENDFILE_READY":
+                    print(f"❌ Unexpected response: {response}")
+                    return
+                
+                self.socket.settimeout(5.0)
+                self.socket.send(f"{file_size}\n".encode('utf-8'))
+                ack = self.socket.recv(1024).decode('utf-8').strip()
+                self.socket.settimeout(0.5)
+                
+                if ack != "[FILE]FILE_SIZE_OK":
+                    print("❌ Server did not acknowledge file size")
+                    return
+                
+                print(f"📤 Sending {filename} to {target_user} ({file_size} bytes)...")
+                with open(filepath, 'rb') as f:
+                    sent = 0
+                    while sent < file_size:
+                        chunk = f.read(4096)
+                        if not chunk:
+                            break
+                        self.socket.send(chunk)
+                        sent += len(chunk)
+                
+                self.socket.settimeout(5.0)
+                confirm = self.socket.recv(1024).decode('utf-8').strip()
+                self.socket.settimeout(0.5)
+                
+                if confirm.startswith("[FILE]"):
+                    print(f"\n{confirm[6:]}")
+                else:
+                    print(f"\n{confirm}")
+            finally:
+                self.receiving_allowed.set()
+            
+        except Exception as e:
+            print(f"❌ Error sending file: {e}")
+    
+    def receive_incoming_file(self, initial_data):
+        """Receive a file sent by another client (relayed by server)"""
+        try:
+            # Split header from any binary data that arrived with it
+            nl = initial_data.find(b'\\n')
+            if nl == -1:
+                header_bytes = initial_data
+                leftover = b''
+            else:
+                header_bytes = initial_data[:nl]
+                leftover = initial_data[nl + 1:]
+            
+            header = header_bytes.decode('utf-8')
+            # Parse: [FILE]INCOMING|sender|filename|filesize
+            parts = header.replace("[FILE]INCOMING|", "").split("|")
+            sender = parts[0]
+            filename = parts[1]
+            file_size = int(parts[2])
+            
+            print(f"\\n📥 Receiving file '{filename}' from {sender} ({file_size} bytes)...")
+            
+            # Receive file data
+            file_data = leftover
+            remaining = file_size - len(leftover)
+            while remaining > 0:
+                try:
+                    chunk = self.socket.recv(min(4096, remaining))
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                file_data += chunk
+                remaining -= len(chunk)
+            
+            # Save to Downloads folder
+            downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+            if not os.path.exists(downloads_dir):
+                downloads_dir = os.path.expanduser('~')
+            
+            save_path = os.path.join(downloads_dir, f"{sender}_{filename}")
+            with open(save_path, 'wb') as f:
+                f.write(file_data)
+            
+            print(f"✅ File saved to: {save_path}")
+            print("You: ", end="")
+            sys.stdout.flush()
+            
+        except Exception as e:
+            print(f"❌ Error receiving file: {e}")
+    
     def show_help(self):
         """Display help"""
         help_text = """
@@ -275,7 +400,8 @@ class ChatClient:
   /quit - Leave the chat
   /list - View connected users
   /msg <username> <message> - Send private message
-  /file <filepath> - Send a file
+  /file <filepath> - Upload a file to the server
+  /sendfile <username> <filepath> - Send a file directly to a user
   /clear - Clear the screen
         """
         print(help_text)

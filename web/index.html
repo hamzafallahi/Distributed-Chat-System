@@ -134,6 +134,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .msg.history{color:var(--text-muted);font-size:.82em;white-space:pre-wrap;max-width:100%;background:none;align-self:center}
 .msg.incoming{background:var(--msg-incoming-bg);align-self:flex-start;border:1px solid var(--msg-incoming-border)}
 .msg.outgoing{background:var(--msg-outgoing-bg);border:1px solid var(--msg-outgoing-border);align-self:flex-end}
+.msg.file-received{background:var(--msg-incoming-bg);align-self:flex-start;border:1px solid var(--msg-incoming-border)}
+.msg.file-received .download-btn{display:inline-block;margin-top:6px;padding:5px 14px;background:var(--accent-green);color:#fff;border-radius:6px;text-decoration:none;font-size:.82em;font-weight:600;transition:background .2s}
+.msg.file-received .download-btn:hover{background:var(--accent-green-hover)}
 
 .chat-input{background:var(--bg-card);padding:14px 20px;display:flex;gap:10px;align-items:center;border-top:1px solid var(--border)}
 .chat-input input[type="text"]{flex:1;padding:11px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:.95em;outline:none;transition:border .2s}
@@ -148,6 +151,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .client-sidebar{width:220px;background:var(--bg-card);border-left:1px solid var(--border);display:flex;flex-direction:column}
 .client-sidebar .user-item{cursor:pointer;transition:background .15s}
 .client-sidebar .user-item:hover{background:var(--icon-hover-bg)}
+.user-item-actions{margin-left:auto;display:flex;gap:4px}
+.btn-send-file{background:none;border:none;cursor:pointer;font-size:.9em;padding:2px 5px;border-radius:4px;transition:all .15s;color:var(--text-muted)}
+.btn-send-file:hover{color:var(--accent-green);background:var(--icon-hover-bg)}
 
 /* ── SERVER DASHBOARD ── */
 #serverDash{flex-direction:column}
@@ -287,6 +293,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="chat-input">
         <label class="btn-icon" for="fileInput" title="Send a file">📎</label>
         <input type="file" id="fileInput" onchange="uploadFile(this)">
+        <input type="file" id="userFileInput" style="display:none" onchange="handleUserFileSend(this)">
         <input type="text" id="msgInput" placeholder="Type a message or /command …" onkeydown="if(event.key==='Enter')sendMsg()">
         <button class="btn-send" onclick="sendMsg()">Send</button>
     </div>
@@ -356,7 +363,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             </div>
             <div class="cmd-item">
                 <span class="cmd-name">/file</span>
-                <span class="cmd-desc">Send a file (or use 📎)</span>
+                <span class="cmd-desc">Upload a file to server (or use 📎)</span>
+            </div>
+            <div class="cmd-item">
+                <span class="cmd-name">/sendfile &lt;user&gt;</span>
+                <span class="cmd-desc">Send a file to a user (or use 📤)</span>
             </div>
             <div class="cmd-item">
                 <span class="cmd-name">/list</span>
@@ -503,9 +514,10 @@ async function pollClient() {
             return;
         }
         data.messages.forEach(m => {
-            if (m.type === 'history')      addChatMsg('history', m.content);
-            else if (m.type === 'system')  addChatMsg('system', m.content);
-            else                           addChatMsg('incoming', m.content);
+            if (m.type === 'history')           addChatMsg('history', m.content);
+            else if (m.type === 'system')       addChatMsg('system', m.content);
+            else if (m.type === 'file_received') addFileReceivedMsg(m);
+            else                                addChatMsg('incoming', m.content);
         });
         cIdx = data.next;
     } catch (e) {}
@@ -520,8 +532,11 @@ async function pollClientUsers() {
             list.innerHTML = '<div class="empty-users">No users online</div>';
         } else {
             list.innerHTML = data.users.map(u =>
-                '<div class="user-item" onclick="dmUser(\'' + u.replace(/'/g, "\\'") + '\')">' +
-                '<div class="dot"></div><span>' + u + '</span></div>'
+                '<div class="user-item">' +
+                '<div class="dot"></div>' +
+                '<span onclick="dmUser(\'' + u.replace(/'/g, "\\'") + '\')" style="cursor:pointer;flex:1">' + u + '</span>' +
+                '<button class="btn-send-file" onclick="event.stopPropagation();sendFileToUser(\'' + u.replace(/'/g, "\\'") + '\')" title="Send file to ' + u + '">📤</button>' +
+                '</div>'
             ).join('');
         }
     } catch (e) {}
@@ -567,6 +582,48 @@ async function uploadFile(input) {
         toast(data.success ? '✅ ' + data.message : '❌ ' + data.message, data.success ? 'success' : 'error');
     } catch (e) { toast('Upload failed', 'error'); }
     input.value = '';
+}
+
+/* ── Send file to specific user ── */
+let sendFileTarget = null;
+
+function sendFileToUser(username) {
+    sendFileTarget = username;
+    document.getElementById('userFileInput').click();
+}
+
+async function handleUserFileSend(input) {
+    const file = input.files[0];
+    if (!file || !sendFileTarget) { input.value = ''; return; }
+    const form = new FormData();
+    form.append('file', file);
+    form.append('session', clientSession);
+    form.append('target', sendFileTarget);
+    toast('Sending ' + file.name + ' to ' + sendFileTarget + ' …');
+    try {
+        const res = await fetch('/api/client/sendfile', {method: 'POST', body: form});
+        const data = await res.json();
+        toast(data.success ? '✅ ' + data.message : '❌ ' + data.message, data.success ? 'success' : 'error');
+    } catch (e) { toast('File send failed', 'error'); }
+    input.value = '';
+    sendFileTarget = null;
+}
+
+function addFileReceivedMsg(m) {
+    const area = document.getElementById('msgArea');
+    const d = document.createElement('div');
+    d.className = 'msg file-received';
+    const safeContent = document.createTextNode(m.content);
+    d.appendChild(safeContent);
+    d.appendChild(document.createElement('br'));
+    const a = document.createElement('a');
+    a.className = 'download-btn';
+    a.href = m.download_url;
+    a.target = '_blank';
+    a.textContent = '⬇ Download ' + (m.filename || 'file');
+    d.appendChild(a);
+    area.appendChild(d);
+    area.scrollTop = area.scrollHeight;
 }
 
 async function clientDisconnect() {

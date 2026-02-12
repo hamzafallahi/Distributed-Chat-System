@@ -3,6 +3,7 @@ import threading
 import sys
 import json
 import os
+import time
 from datetime import datetime
 
 class ChatServer:
@@ -182,15 +183,16 @@ class ChatServer:
         
         while True:
             try:
-                message = client_socket.recv(1024).decode('utf-8')
+                message = client_socket.recv(1024).decode('utf-8').strip()
                 
                 if not message:
                     break
                     
                 if message.startswith("/"):
-                    # Special command
-                    if message.startswith("/file "):
-                        # Handle file transfer
+                    # Special command - check /sendfile BEFORE /file
+                    if message.startswith("/sendfile "):
+                        self.handle_sendfile_transfer(client_socket, message)
+                    elif message.startswith("/file "):
                         self.handle_file_transfer(client_socket, message)
                     else:
                         self.handle_command(client_socket, message)
@@ -235,7 +237,8 @@ class ChatServer:
 /list - View connected users
 /help - Show this help
 /msg <username> <message> - Send private message
-/file <filename> - Send a file
+/file <filename> - Upload a file to the server
+/sendfile <username> <filename> - Send a file directly to a user
             """
             client_socket.send(help_text.encode('utf-8'))
             
@@ -262,7 +265,12 @@ class ChatServer:
             client_socket.send("[FILE]FILE_READY".encode('utf-8'))
             
             # Receive file size
-            file_size_data = client_socket.recv(1024).decode('utf-8')
+            file_size_data = client_socket.recv(1024).decode('utf-8').strip()
+            # Validate it's actually a number, not a command
+            if not file_size_data.isdigit():
+                client_socket.send(f"[FILE]❌ Invalid file size received: {file_size_data[:50]}".encode('utf-8'))
+                print(f"❌ File transfer: Expected file size, got: {file_size_data[:50]}")
+                return
             file_size = int(file_size_data)
             
             # Send acknowledgment
@@ -300,6 +308,83 @@ class ChatServer:
             except:
                 pass
     
+    def handle_sendfile_transfer(self, client_socket, message):
+        """Handle file transfer from one client to another (server relays)"""
+        try:
+            parts = message.split(" ", 2)
+            if len(parts) < 3:
+                client_socket.send("[FILE]❌ Usage: /sendfile <username> <filename>".encode('utf-8'))
+                return
+
+            target_username = parts[1].strip()
+            filename = parts[2].strip()
+            nickname = self.nicknames[client_socket]
+
+            # Find target client
+            target_socket = None
+            with self.lock:
+                for sock, nick in self.nicknames.items():
+                    if nick == target_username:
+                        target_socket = sock
+                        break
+
+            if not target_socket:
+                client_socket.send(f"[FILE]❌ User '{target_username}' is not online".encode('utf-8'))
+                return
+
+            if target_socket == client_socket:
+                client_socket.send("[FILE]❌ Cannot send a file to yourself".encode('utf-8'))
+                return
+
+            # Tell sender we're ready
+            client_socket.send("[FILE]SENDFILE_READY".encode('utf-8'))
+
+            # Receive file size
+            file_size_data = client_socket.recv(1024).decode('utf-8').strip()
+            # Validate it's actually a number, not a command  
+            if not file_size_data.isdigit():
+                client_socket.send(f"[FILE]❌ Invalid file size received: {file_size_data[:50]}".encode('utf-8'))
+                print(f"❌ Sendfile: Expected file size, got: {file_size_data[:50]}")
+                return
+            file_size = int(file_size_data)
+
+            client_socket.send("[FILE]FILE_SIZE_OK".encode('utf-8'))
+
+            # Receive file data from sender
+            file_data = b""
+            remaining = file_size
+            while remaining > 0:
+                chunk = client_socket.recv(min(4096, remaining))
+                if not chunk:
+                    break
+                file_data += chunk
+                remaining -= len(chunk)
+
+            # Forward to target: send header with newline delimiter, then binary data
+            header = f"[FILE]INCOMING|{nickname}|{filename}|{file_size}\n"
+            target_socket.send(header.encode('utf-8'))
+            time.sleep(0.1)  # ensure header arrives separately
+
+            sent = 0
+            while sent < len(file_data):
+                end = min(sent + 4096, len(file_data))
+                target_socket.send(file_data[sent:end])
+                sent = end
+
+            # Confirm to sender
+            client_socket.send(f"[FILE]✅ File '{filename}' sent to {target_username}".encode('utf-8'))
+
+            # Log it
+            timestamp = self.get_timestamp()
+            print(f"📎 {nickname} ➜ {target_username}: {filename} ({file_size} bytes)")
+
+        except Exception as e:
+            print(f"❌ Sendfile error: {e}")
+            try:
+                client_socket.send(f"[FILE]❌ Send file failed: {str(e)}".encode('utf-8'))
+            except:
+                pass
+
     def send_private_message(self, sender, target, message):
         """Send a private message"""
         with self.lock:
