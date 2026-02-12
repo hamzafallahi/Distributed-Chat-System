@@ -30,7 +30,7 @@ A real-time multi-client TCP chat application built with Python sockets and thre
 | **User Authentication** | Username/password login from `users.json`. Same user cannot log in twice at the same time. |
 | **Public Chat** | Messages are broadcast to every connected client in real time. |
 | **Private Messaging** | `/msg <user> <message>` sends a message visible only to the target user. |
-| **File Sharing** | `/file <filepath>` uploads any file to the server's `uploads/` directory and notifies all users. |
+| **File Sharing** | `/file <filepath>` uploads any file to the server's `uploads/` directory and notifies all users. `/sendfile <user> <filepath>` sends a file directly to a specific user. |
 | **Chat History** | Last 100 messages are persisted in `chat_history.json`. New clients receive the last 20 on connect. |
 | **Server Admin Console** | The server operator can list users, broadcast announcements, and shut down gracefully. |
 | **Web UI** | Modern browser-based interface with dark/light theme toggle, user list, file upload, and server dashboard. |
@@ -164,7 +164,7 @@ Open http://localhost:5000 in your browser. You'll see a mode selection screen.
 #### 3. Choose Server or Client Mode
 
 - **Server Mode:** Click "Server Mode", enter bind host/port (defaults are fine), click "Start Server". The TCP server starts in-process, and you get a dashboard to monitor users, logs, and broadcast messages.
-- **Client Mode:** Click "Client Mode", enter server host/port and your credentials, click "Connect". You get a chat interface with user list, file upload, and commands.
+- **Client Mode:** Click "Client Mode", enter server host/port and your credentials, click "Connect". You get a chat interface with user list, file upload, and commands. You can send files directly to specific users by clicking the send file button next to their name in the user list.
 
 #### 4. Multiple Clients
 
@@ -208,6 +208,7 @@ Once connected, just type a message and press Enter to send it to everyone. The 
 | `/list` | List all currently connected users | `/list` |
 | `/msg <user> <message>` | Send a private message to one user | `/msg alice hey!` |
 | `/file <filepath>` | Upload a file to the server | `/file C:\docs\report.pdf` |
+| `/sendfile <user> <filepath>` | Send a file directly to a specific user | `/sendfile alice C:\docs\report.pdf` |
 | `/clear` | Clear the terminal screen | `/clear` |
 
 ### Examples
@@ -216,6 +217,7 @@ Once connected, just type a message and press Enter to send it to everyone. The 
 You: hello everyone!                           ← public message to all
 You: /msg alice this is just for you           ← private message
 You: /file C:\Users\hamza\Desktop\image.png    ← upload a file
+You: /sendfile alice C:\docs\report.pdf         ← send file directly to alice
 You: /list                                     ← see who's online
 You: /quit                                     ← leave
 ```
@@ -252,6 +254,8 @@ server> /shutdown
 
 ## How File Transfer Works
 
+### Uploading to Server (`/file`)
+
 The file transfer uses a custom handshake protocol over the same TCP connection:
 
 ```
@@ -272,6 +276,29 @@ Client                              Server
 4. Client streams the raw file bytes in 4 KB chunks.
 5. Server saves the file to `uploads/<username>_<filename>`.
 6. Server confirms to the sender and broadcasts a notification to all other clients.
+
+### Sending to Specific User (`/sendfile`)
+
+For direct file transfer between clients, the server acts as a relay:
+
+```
+Client A (sender)                   Server                              Client B (receiver)
+  │                                    │                                    │
+  │──── "/sendfile <user> <filename>" ▸│                                    │
+  │◄──── "[FILE]SENDFILE_READY" ──────│                                    │
+  │──── file size ────────────────────▸│                                    │
+  │◄──── "[FILE]FILE_SIZE_OK" ────────│                                    │
+  │──── file data ────────────────────▸│──── header + data ───────────────▸│
+  │◄──── "[FILE]✅ File sent" ─────────│◄──── (receives file) ─────────────│
+```
+
+1. Sender initiates with `/sendfile <target_user> <filename>`.
+2. Server checks if target is online and responds with `SENDFILE_READY`.
+3. Sender sends file size, server acknowledges.
+4. Sender streams file data to server.
+5. Server forwards the data to the target client with a special header `[FILE]INCOMING|<sender>|<filename>|<size>\n`.
+6. Target client receives and saves the file locally (e.g., to Downloads folder).
+7. Server confirms to sender.
 
 A `threading.Lock` (`recv_lock`) on the client ensures the receive thread doesn't intercept the file protocol messages during this handshake — without it, the client would freeze.
 
