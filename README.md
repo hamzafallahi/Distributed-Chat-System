@@ -1,6 +1,6 @@
 # Distributed Chat System
 
-A real-time multi-client TCP chat application built with Python sockets and threading. Features user authentication, public/private messaging, file sharing, persistent chat history, and a server admin console. No external dependencies — runs entirely on the Python standard library.
+A real-time multi-client TCP chat application built with Python sockets and threading. Features user authentication, public/private messaging, file sharing, persistent chat history, a server admin console, and a modern web UI. The console-based client/server runs entirely on the Python standard library, while the web UI requires Flask.
 
 ---
 
@@ -33,6 +33,8 @@ A real-time multi-client TCP chat application built with Python sockets and thre
 | **File Sharing** | `/file <filepath>` uploads any file to the server's `uploads/` directory and notifies all users. |
 | **Chat History** | Last 100 messages are persisted in `chat_history.json`. New clients receive the last 20 on connect. |
 | **Server Admin Console** | The server operator can list users, broadcast announcements, and shut down gracefully. |
+| **Web UI** | Modern browser-based interface with dark/light theme toggle, user list, file upload, and server dashboard. |
+| **Multi-Client Sessions** | Web UI supports multiple independent client sessions (one per browser tab). |
 | **Timestamps** | Every message is timestamped in `DD Month YYYY HH:MM:SS` format. |
 | **Graceful Disconnect** | `/quit` notifies everyone. Server shutdown warns all clients before closing. |
 | **Cross-Platform** | Works on Windows, macOS, and Linux. |
@@ -42,7 +44,8 @@ A real-time multi-client TCP chat application built with Python sockets and thre
 ## Prerequisites
 
 - **Python 3.6+**
-- No external packages — uses only the standard library (`socket`, `threading`, `json`, `os`, `sys`, `datetime`).
+- For the console-based client/server: No external packages — uses only the standard library (`socket`, `threading`, `json`, `os`, `sys`, `datetime`).
+- For the web UI: Install Flask with `pip install flask`.
 
 ---
 
@@ -52,9 +55,12 @@ A real-time multi-client TCP chat application built with Python sockets and thre
 project system dis/
 ├── serveur.py            # Chat server — manages connections, auth, messaging, file storage
 ├── client.py             # Chat client — connects to server, sends/receives messages and files
+├── webapp.py             # Flask web UI backend — serves the browser interface and bridges to TCP server
 ├── users.json            # User credentials database (username + password)
 ├── chat_history.json     # Persistent message history (auto-created, keeps last 100 messages)
 ├── uploads/              # Uploaded files are stored here as <username>_<filename> (auto-created)
+├── web/
+│   └── index.html        # Single-page web UI (dark/light theme, client chat, server dashboard)
 └── README.md             # This file
 ```
 
@@ -62,7 +68,11 @@ project system dis/
 
 ## How to Run
 
-### 1. Start the Server
+You have two ways to use the chat system: the original console-based client/server, or the new web UI. Both work seamlessly and can be used together.
+
+### Console Version (Original)
+
+#### 1. Start the Server
 
 Open a terminal in the project folder and run:
 
@@ -88,7 +98,7 @@ server>
 
 The server is now listening on **all network interfaces** on port **12345**.
 
-### 2. Start a Client
+#### 2. Start a Client
 
 Open a **separate** terminal and run:
 
@@ -112,14 +122,58 @@ Password: 1234
 
 After connecting you'll see the recent chat history and can start typing messages.
 
-### 3. Connect More Clients
+#### 3. Connect More Clients
 
 Repeat step 2 in additional terminal windows. Each client must log in with a **different** account — duplicate logins are rejected.
 
-### 4. Stop Everything
+#### 4. Stop Everything
 
 - **Client:** type `/quit` or press `Ctrl+C`.
 - **Server:** type `/shutdown` at the `server>` prompt, or press `Ctrl+C`.
+
+### Web UI Version (New)
+
+The web UI provides a modern browser-based interface for both client and server modes. It runs on top of the same TCP server/client system.
+
+#### Requirements
+
+- Install Flask: `pip install flask`
+
+#### 1. Start the Web App
+
+Run the Flask backend:
+
+```bash
+python webapp.py
+```
+
+Output:
+
+```
+==================================================
+  Chat Web App
+==================================================
+  Open  http://localhost:5000  in your browser
+==================================================
+```
+
+#### 2. Open in Browser
+
+Open http://localhost:5000 in your browser. You'll see a mode selection screen.
+
+#### 3. Choose Server or Client Mode
+
+- **Server Mode:** Click "Server Mode", enter bind host/port (defaults are fine), click "Start Server". The TCP server starts in-process, and you get a dashboard to monitor users, logs, and broadcast messages.
+- **Client Mode:** Click "Client Mode", enter server host/port and your credentials, click "Connect". You get a chat interface with user list, file upload, and commands.
+
+#### 4. Multiple Clients
+
+Each browser tab can run its own client session. Open multiple tabs to connect as different users.
+
+#### 5. Stop
+
+- **Client:** Click "Disconnect" in the chat header.
+- **Server:** Click "Stop Server" in the dashboard header.
 
 ---
 
@@ -343,16 +397,87 @@ self.uploads_dir = 'uploads'  # change to any path
 
 ## Running on Multiple Machines (LAN)
 
-1. Start the server on one machine (`python serveur.py`).
-2. Find the server's local IP:
-   - **Windows:** run `ipconfig` → look for **IPv4 Address** (e.g., `192.168.1.100`)
-   - **Linux/macOS:** run `hostname -I` or `ifconfig`
-3. On the client machine, enter the server's IP when prompted:
-   ```
-   Server address [localhost]: 192.168.1.100
-   Port [12345]: 12345
-   ```
-4. Make sure your firewall allows inbound TCP traffic on port **12345**.
+Both the console version and web UI work across multiple machines on the same network. You have two clean options – both work perfectly with your current code.
+
+### ✅ Option 1 – Single Web Server + Remote Browser (Simplest)
+
+One machine runs everything: the TCP server + the web UI. Any other machine on the network just opens a browser to that machine's IP.
+
+#### On Machine A (the one that will host the chat server + web UI)
+
+Ensure `webapp.py`, `serveur.py`, `users.json`, and the `web/` folder with `index.html` are in the same directory.
+
+Start the web app:
+
+```cmd
+python webapp.py
+```
+
+Open a browser on Machine A to http://localhost:5000.
+
+Click "Server Mode" → accept the defaults → "Start Server". The TCP server is now listening on port 12345, and the web UI is accessible from other machines.
+
+Find Machine A's local IP (e.g., 192.168.1.100).
+
+#### On Machine B (any other PC)
+
+Open a browser and go to http://192.168.1.100:5000 (the IP of Machine A).
+
+Click "Client Mode".
+
+Enter:
+
+- Host: localhost (or 127.0.0.1 or even 192.168.1.100) – all work, because the TCP server is on the same machine as the web backend.
+- Port: 12345
+- Your username/password from `users.json`.
+
+Click "Connect".
+
+✅ You are now chatting via the TCP server on Machine A, using the web UI served from Machine A, but displayed in a browser on Machine B.
+
+File transfers work exactly the same – files are saved in `uploads/` on Machine A.
+
+### ✅ Option 2 – Separate Web Clients (Each machine runs its own webapp.py)
+
+If you prefer to run a dedicated web UI locally on each client machine, that also works.
+
+#### On Machine A (TCP server)
+
+Run the TCP server only:
+
+```cmd
+python serveur.py
+```
+
+(No web UI needed here unless you also want the dashboard.)
+
+#### On Machine B (your client PC)
+
+Run your local webapp.py:
+
+```cmd
+python webapp.py
+```
+
+Open browser to http://localhost:5000.
+
+Click "Client Mode".
+
+Enter Machine A's IP (e.g., 192.168.1.100) and port 12345, authenticate.
+
+This is the classic client-server separation – the web UI and the client bridge run locally, but the TCP server is remote.
+
+### 🔥 Which one should you use?
+
+| Scenario | Option 1 | Option 2 |
+|---|---|---|
+| You want to only run one Python process on the server machine | ✅ Perfect | ❌ Requires both `serveur.py` and `webapp.py` running separately |
+| Multiple clients need to chat | ✅ One browser tab per client, all served from the same machine | ✅ Each client runs its own `webapp.py` (more processes) |
+| You want the server dashboard (user list, logs, broadcast) | ✅ Yes – Server Mode provides the dashboard | ❌ Dashboard is only available if you also run `webapp.py` on the server |
+| File uploads | ✅ All files saved on Machine A | ✅ All files saved on Machine A (remote server) |
+| Ease of setup | One-click server start via web UI | Manual start of `serveur.py` on remote machine |
+
+Both work seamlessly with your existing code. Choose Option 1 if you want the simplest deployment – you only need to start one Python script on one machine, and everyone else just opens a browser.
 
 ---
 
