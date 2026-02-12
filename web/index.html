@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat App</title>
+<style>
+/* ══════════════════════════════
+   THEME VARIABLES
+   ══════════════════════════════ */
+:root, [data-theme="dark"] {
+    --bg-primary: #0f0f1a;
+    --bg-card: #1a1a2e;
+    --bg-input: #0f0f1a;
+    --border: #2a2a40;
+    --text-primary: #e2e8f0;
+    --text-secondary: #64748b;
+    --text-muted: #475569;
+    --text-body: #cbd5e1;
+    --accent-purple: #6366f1;
+    --accent-purple-hover: #4f46e5;
+    --accent-purple-glow: rgba(99,102,241,.15);
+    --accent-green: #10b981;
+    --accent-green-hover: #059669;
+    --accent-green-glow: rgba(16,185,129,.15);
+    --accent-red: #ef4444;
+    --accent-red-hover: #dc2626;
+    --accent-yellow: #f59e0b;
+    --msg-incoming-bg: #1e1e32;
+    --msg-incoming-border: #2a2a40;
+    --msg-outgoing-bg: rgba(99,102,241,.18);
+    --msg-outgoing-border: rgba(99,102,241,.3);
+    --scrollbar-thumb: #2a2a40;
+    --icon-hover-bg: #252540;
+    --gradient-start: #0f0f1a;
+    --gradient-end: #1a1a2e;
+    --modal-overlay: rgba(0,0,0,.6);
+}
+[data-theme="light"] {
+    --bg-primary: #f1f5f9;
+    --bg-card: #ffffff;
+    --bg-input: #f8fafc;
+    --border: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --text-body: #334155;
+    --accent-purple: #6366f1;
+    --accent-purple-hover: #4f46e5;
+    --accent-purple-glow: rgba(99,102,241,.08);
+    --accent-green: #10b981;
+    --accent-green-hover: #059669;
+    --accent-green-glow: rgba(16,185,129,.08);
+    --accent-red: #ef4444;
+    --accent-red-hover: #dc2626;
+    --accent-yellow: #d97706;
+    --msg-incoming-bg: #f1f5f9;
+    --msg-incoming-border: #e2e8f0;
+    --msg-outgoing-bg: rgba(99,102,241,.08);
+    --msg-outgoing-border: rgba(99,102,241,.2);
+    --scrollbar-thumb: #cbd5e1;
+    --icon-hover-bg: #e2e8f0;
+    --gradient-start: #f1f5f9;
+    --gradient-end: #ffffff;
+    --modal-overlay: rgba(0,0,0,.25);
+}
+
+/* ══════════════════════════════
+   BASE
+   ══════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-primary);color:var(--text-primary);height:100vh;overflow:hidden;transition:background .3s,color .3s}
+.hidden{display:none!important}
+.view{display:none;height:100vh}.view.active{display:flex}
+
+/* ── THEME TOGGLE ── */
+.theme-toggle{position:fixed;top:14px;right:14px;z-index:1000;background:var(--bg-card);border:1px solid var(--border);border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.15em;transition:all .25s;color:var(--text-primary)}
+.theme-toggle:hover{border-color:var(--accent-purple);transform:rotate(25deg);box-shadow:0 0 16px var(--accent-purple-glow)}
+
+/* ── MODE SELECT ── */
+#modeSelect{flex-direction:column;align-items:center;justify-content:center;gap:16px;background:linear-gradient(135deg,var(--gradient-start) 0%,var(--gradient-end) 100%)}
+#modeSelect h1{font-size:2.8em;background:linear-gradient(135deg,#6366f1,#10b981);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+#modeSelect .sub{color:var(--text-secondary);margin-bottom:32px;font-size:1.05em}
+.mode-cards{display:flex;gap:28px}
+.mode-card{background:var(--bg-card);border:2px solid var(--border);border-radius:18px;padding:44px 36px;width:280px;text-align:center;cursor:pointer;transition:all .3s}
+.mode-card:hover{transform:translateY(-6px)}
+.mode-card.client:hover{border-color:var(--accent-green);box-shadow:0 12px 40px var(--accent-green-glow)}
+.mode-card.server:hover{border-color:var(--accent-purple);box-shadow:0 12px 40px var(--accent-purple-glow)}
+.mode-card .icon{font-size:3em;margin-bottom:14px}
+.mode-card h2{margin-bottom:8px;font-size:1.2em}
+.mode-card p{color:var(--text-secondary);font-size:.88em;line-height:1.4}
+
+/* ── FORMS ── */
+.setup-view{flex-direction:column;align-items:center;justify-content:center}
+.form-card{background:var(--bg-card);border:1px solid var(--border);border-radius:18px;padding:40px;width:420px;max-width:92%}
+.form-card h2{margin-bottom:24px;text-align:center;font-size:1.4em}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;margin-bottom:5px;color:var(--text-secondary);font-size:.82em;text-transform:uppercase;letter-spacing:.5px}
+.form-group input{width:100%;padding:11px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:.95em;outline:none;transition:border .2s}
+.form-group input:focus{border-color:var(--accent-purple)}
+.form-row{display:flex;gap:10px}
+.form-row .form-group{flex:1}
+
+.btn{padding:11px 20px;border:none;border-radius:10px;font-size:.95em;cursor:pointer;transition:all .2s;font-weight:600}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent-purple);color:#fff;width:100%;padding:13px;margin-top:10px}
+.btn-primary:hover:not(:disabled){background:var(--accent-purple-hover)}
+.btn-green{background:var(--accent-green);color:#fff;width:100%;padding:13px;margin-top:10px}
+.btn-green:hover:not(:disabled){background:var(--accent-green-hover)}
+.btn-ghost{background:none;color:var(--text-secondary);margin-top:14px;width:100%;border:none;cursor:pointer;font-size:.9em;padding:8px}
+.btn-ghost:hover{color:var(--text-primary)}
+.btn-danger{background:var(--accent-red);color:#fff}
+.btn-danger:hover{background:var(--accent-red-hover)}
+.btn-sm{padding:7px 16px;font-size:.82em;border-radius:8px}
+.error-msg{color:var(--accent-red);text-align:center;margin-top:12px;font-size:.88em}
+
+/* ── HEADER ACTIONS ── */
+.header-actions{display:flex;gap:6px;align-items:center;margin-right: 5%;}
+.btn-icon-sm{background:none;border:1px solid var(--border);color:var(--text-secondary);width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1em;transition:all .15s}
+.btn-icon-sm:hover{color:var(--text-primary);border-color:var(--accent-purple);background:var(--icon-hover-bg)}
+
+/* ── CLIENT CHAT ── */
+#clientChat{flex-direction:column}
+.chat-header{background:var(--bg-card);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.chat-header .user-info{display:flex;align-items:center;gap:10px;font-weight:600}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--accent-green)}
+.chat-body{flex:1;overflow:hidden;display:flex}
+.messages-area{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:6px}
+.messages-area::-webkit-scrollbar{width:5px}
+.messages-area::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:4px}
+
+.msg{padding:9px 14px;border-radius:12px;max-width:75%;word-wrap:break-word;font-size:.93em;line-height:1.45}
+.msg.system{color:var(--text-secondary);font-style:italic;text-align:center;align-self:center;background:none;max-width:100%;font-size:.84em}
+.msg.history{color:var(--text-muted);font-size:.82em;white-space:pre-wrap;max-width:100%;background:none;align-self:center}
+.msg.incoming{background:var(--msg-incoming-bg);align-self:flex-start;border:1px solid var(--msg-incoming-border)}
+.msg.outgoing{background:var(--msg-outgoing-bg);border:1px solid var(--msg-outgoing-border);align-self:flex-end}
+
+.chat-input{background:var(--bg-card);padding:14px 20px;display:flex;gap:10px;align-items:center;border-top:1px solid var(--border)}
+.chat-input input[type="text"]{flex:1;padding:11px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:.95em;outline:none;transition:border .2s}
+.chat-input input[type="text"]:focus{border-color:var(--accent-green)}
+.chat-input input[type="file"]{display:none}
+.btn-icon{background:none;border:none;color:var(--text-secondary);font-size:1.35em;cursor:pointer;padding:6px 8px;border-radius:8px;transition:all .2s}
+.btn-icon:hover{color:var(--text-primary);background:var(--icon-hover-bg)}
+.btn-send{background:var(--accent-green);border:none;color:#fff;padding:11px 22px;border-radius:10px;cursor:pointer;font-weight:600;font-size:.92em;transition:all .2s}
+.btn-send:hover{background:var(--accent-green-hover)}
+
+/* ── CLIENT SIDEBAR ── */
+.client-sidebar{width:220px;background:var(--bg-card);border-left:1px solid var(--border);display:flex;flex-direction:column}
+.client-sidebar .user-item{cursor:pointer;transition:background .15s}
+.client-sidebar .user-item:hover{background:var(--icon-hover-bg)}
+
+/* ── SERVER DASHBOARD ── */
+#serverDash{flex-direction:column}
+.dash-header{background:var(--bg-card);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.dash-header .server-status{display:flex;align-items:center;gap:10px;font-weight:600}
+.dash-header .server-info{color:var(--text-secondary);font-size:.82em;margin-left:8px}
+.dash-body{flex:1;display:flex;overflow:hidden}
+.dash-logs{flex:1;display:flex;flex-direction:column}
+
+.log-area{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:4px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:.87em}
+.log-area::-webkit-scrollbar{width:5px}
+.log-area::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:4px}
+.log-entry{padding:3px 0;line-height:1.5}
+.log-entry.system{color:var(--accent-green)}
+.log-entry.message{color:var(--text-body)}
+.log-entry.join{color:var(--accent-purple)}
+.log-entry.leave{color:var(--accent-yellow)}
+.log-entry.broadcast{color:var(--accent-yellow)}
+
+.dash-sidebar{width:240px;background:var(--bg-card);border-left:1px solid var(--border);display:flex;flex-direction:column}
+.sidebar-title{padding:14px 18px;font-weight:600;border-bottom:1px solid var(--border);color:var(--text-secondary);font-size:.78em;text-transform:uppercase;letter-spacing:1.2px}
+.user-list{flex:1;overflow-y:auto;padding:8px}
+.user-item{padding:9px 14px;display:flex;align-items:center;gap:9px;border-radius:8px;font-size:.9em}
+.user-item .dot{width:8px;height:8px;background:var(--accent-green);border-radius:50%;flex-shrink:0}
+.empty-users{padding:24px;color:var(--text-muted);text-align:center;font-size:.85em}
+
+.broadcast-bar{padding:14px 20px;display:flex;gap:10px;border-top:1px solid var(--border)}
+.broadcast-bar input{flex:1;padding:11px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:.95em;outline:none;transition:border .2s}
+.broadcast-bar input:focus{border-color:var(--accent-purple)}
+.btn-broadcast{background:var(--accent-purple);border:none;color:#fff;padding:11px 22px;border-radius:10px;cursor:pointer;font-weight:600;font-size:.92em;transition:all .2s}
+.btn-broadcast:hover{background:var(--accent-purple-hover)}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:var(--modal-overlay);display:flex;align-items:center;justify-content:center;z-index:5000;animation:fadeIn .2s}
+.modal-content{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;width:460px;max-width:92%;overflow:hidden}
+.modal-header{padding:18px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.modal-header h3{font-size:1.1em}
+.modal-close{background:none;border:none;color:var(--text-secondary);font-size:1.3em;cursor:pointer;padding:4px 8px;border-radius:6px}
+.modal-close:hover{color:var(--text-primary);background:var(--icon-hover-bg)}
+.modal-body{padding:18px 22px}
+.cmd-item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;margin-bottom:6px;transition:background .2s}
+.cmd-item:hover{background:var(--bg-input)}
+.cmd-name{font-family:'Cascadia Code','Fira Code',monospace;color:var(--accent-green);font-size:.9em;font-weight:600}
+.cmd-desc{color:var(--text-secondary);font-size:.85em}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg-card);border:1px solid var(--border);padding:12px 22px;border-radius:10px;z-index:9999;animation:slideUp .3s ease;font-size:.9em;max-width:400px}
+.toast.success{border-color:var(--accent-green);color:var(--accent-green)}
+.toast.error{border-color:var(--accent-red);color:var(--accent-red)}
+
+@keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+@media(max-width:640px){
+    .mode-cards{flex-direction:column;gap:16px}
+    .mode-card{width:260px;padding:28px 24px}
+    .dash-sidebar,.client-sidebar{display:none}
+    .theme-toggle{top:10px;right:10px;width:36px;height:36px;font-size:1em}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ THEME TOGGLE ═══ -->
+<button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+    <span id="themeIcon">🌙</span>
+</button>
+
+<!-- ═══ MODE SELECT ═══ -->
+<div id="modeSelect" class="view active">
+    <h1>Chat App</h1>
+    <p class="sub">Choose how you want to use the application</p>
+    <div class="mode-cards">
+        <div class="mode-card client" onclick="showView('clientSetup')">
+            <div class="icon">💬</div>
+            <h2>Client Mode</h2>
+            <p>Connect to a chat server, send messages, share files with others</p>
+        </div>
+        <div class="mode-card server" onclick="showView('serverSetup')">
+            <div class="icon">🖥️</div>
+            <h2>Server Mode</h2>
+            <p>Host a chat server, monitor messages, manage connected users</p>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ CLIENT SETUP ═══ -->
+<div id="clientSetup" class="view setup-view">
+    <div class="form-card">
+        <h2>🔌 Connect to Server</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Host</label>
+                <input type="text" id="cHost" value="localhost" placeholder="localhost">
+            </div>
+            <div class="form-group" style="max-width:120px">
+                <label>Port</label>
+                <input type="number" id="cPort" value="12345">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="cUser" placeholder="Enter your username">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="cPass" placeholder="Enter your password" onkeydown="if(event.key==='Enter')clientConnect()">
+        </div>
+        <div id="cError" class="error-msg hidden"></div>
+        <button class="btn btn-green" id="cBtn" onclick="clientConnect()">Connect</button>
+        <button class="btn btn-ghost" onclick="showView('modeSelect')">← Back</button>
+    </div>
+</div>
+
+<!-- ═══ CLIENT CHAT ═══ -->
+<div id="clientChat" class="view">
+    <div class="chat-header">
+        <div class="user-info">
+            <div class="status-dot"></div>
+            <span id="chatNick">user</span>
+        </div>
+        <div class="header-actions">
+            <button class="btn-icon-sm" onclick="toggleHelp()" title="Commands help">❓</button>
+            <button class="btn-icon-sm" onclick="clearChat()" title="Clear chat">🗑️</button>
+            <button class="btn btn-danger btn-sm" onclick="clientDisconnect()">Disconnect</button>
+        </div>
+    </div>
+    <div class="chat-body">
+        <div class="messages-area" id="msgArea"></div>
+        <div class="client-sidebar">
+            <div class="sidebar-title">Online Users</div>
+            <div class="user-list" id="clientUserList">
+                <div class="empty-users">Loading…</div>
+            </div>
+        </div>
+    </div>
+    <div class="chat-input">
+        <label class="btn-icon" for="fileInput" title="Send a file">📎</label>
+        <input type="file" id="fileInput" onchange="uploadFile(this)">
+        <input type="text" id="msgInput" placeholder="Type a message or /command …" onkeydown="if(event.key==='Enter')sendMsg()">
+        <button class="btn-send" onclick="sendMsg()">Send</button>
+    </div>
+</div>
+
+<!-- ═══ SERVER SETUP ═══ -->
+<div id="serverSetup" class="view setup-view">
+    <div class="form-card">
+        <h2>🖥️ Start Server</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Bind Host</label>
+                <input type="text" id="sHost" value="0.0.0.0">
+            </div>
+            <div class="form-group" style="max-width:120px">
+                <label>Port</label>
+                <input type="number" id="sPort" value="12345">
+            </div>
+        </div>
+        <div id="sError" class="error-msg hidden"></div>
+        <button class="btn btn-primary" id="sBtn" onclick="serverStart()">Start Server</button>
+        <button class="btn btn-ghost" onclick="showView('modeSelect')">← Back</button>
+    </div>
+</div>
+
+<!-- ═══ SERVER DASHBOARD ═══ -->
+<div id="serverDash" class="view">
+    <div class="dash-header">
+        <div class="server-status">
+            <div class="status-dot"></div>
+            <span>Server Running</span>
+            <span class="server-info" id="sInfo"></span>
+        </div>
+        <div class="header-actions">
+            <button class="btn-icon-sm" onclick="openUploads()" title="Open uploads folder">📁</button>
+            <button class="btn btn-danger btn-sm" onclick="serverStop()">Stop Server</button>
+        </div>
+    </div>
+    <div class="dash-body">
+        <div class="dash-logs">
+            <div class="log-area" id="logArea"></div>
+            <div class="broadcast-bar">
+                <input type="text" id="bcInput" placeholder="Broadcast a message to all users …" onkeydown="if(event.key==='Enter')serverBroadcast()">
+                <button class="btn-broadcast" onclick="serverBroadcast()">Broadcast</button>
+            </div>
+        </div>
+        <div class="dash-sidebar">
+            <div class="sidebar-title">Connected Users</div>
+            <div class="user-list" id="userList">
+                <div class="empty-users">No users connected</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ HELP MODAL ═══ -->
+<div id="helpModal" class="modal-overlay hidden" onclick="if(event.target===this)toggleHelp()">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📋 Available Commands</h3>
+            <button class="modal-close" onclick="toggleHelp()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="cmd-item">
+                <span class="cmd-name">/msg &lt;user&gt; &lt;text&gt;</span>
+                <span class="cmd-desc">Send a private message</span>
+            </div>
+            <div class="cmd-item">
+                <span class="cmd-name">/file</span>
+                <span class="cmd-desc">Send a file (or use 📎)</span>
+            </div>
+            <div class="cmd-item">
+                <span class="cmd-name">/list</span>
+                <span class="cmd-desc">View connected users</span>
+            </div>
+            <div class="cmd-item">
+                <span class="cmd-name">/clear</span>
+                <span class="cmd-desc">Clear chat messages</span>
+            </div>
+            <div class="cmd-item">
+                <span class="cmd-name">/quit</span>
+                <span class="cmd-desc">Disconnect from server</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════ */
+function toggleTheme() {
+    const html = document.documentElement;
+    const next = (html.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('chat-theme', next);
+    document.getElementById('themeIcon').textContent = next === 'dark' ? '🌙' : '☀️';
+}
+(function initTheme() {
+    const saved = localStorage.getItem('chat-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.getElementById('themeIcon').textContent = saved === 'dark' ? '🌙' : '☀️';
+})();
+
+/* ═══════════════════════════════════════
+   VIEW HELPERS
+   ═══════════════════════════════════════ */
+function showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg; el.classList.remove('hidden');
+}
+function hideError(id) { document.getElementById(id).classList.add('hidden'); }
+
+function toast(msg, type = 'success') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+}
+
+function addChatMsg(cls, text) {
+    const area = document.getElementById('msgArea');
+    const d = document.createElement('div');
+    d.className = 'msg ' + cls;
+    d.textContent = text;
+    area.appendChild(d);
+    area.scrollTop = area.scrollHeight;
+}
+
+function addLogEntry(cls, text) {
+    const area = document.getElementById('logArea');
+    const d = document.createElement('div');
+    d.className = 'log-entry ' + cls;
+    d.textContent = text;
+    area.appendChild(d);
+    area.scrollTop = area.scrollHeight;
+}
+
+/* ═══════════════════════════════════════
+   HELP MODAL & CLEAR
+   ═══════════════════════════════════════ */
+function toggleHelp() {
+    document.getElementById('helpModal').classList.toggle('hidden');
+}
+function clearChat() {
+    document.getElementById('msgArea').innerHTML = '';
+}
+
+/* ═══════════════════════════════════════
+   CLIENT MODE
+   ═══════════════════════════════════════ */
+let cPoll = null, cIdx = 0, cuPoll = null, clientSession = null;
+
+async function clientConnect() {
+    const btn = document.getElementById('cBtn');
+    btn.disabled = true; btn.textContent = 'Connecting…';
+    hideError('cError');
+
+    try {
+        const res = await fetch('/api/client/connect', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                host: document.getElementById('cHost').value,
+                port: parseInt(document.getElementById('cPort').value),
+                username: document.getElementById('cUser').value,
+                password: document.getElementById('cPass').value
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            clientSession = data.session;
+            document.getElementById('chatNick').textContent = data.nickname;
+            document.getElementById('msgArea').innerHTML = '';
+            cIdx = 0;
+            showView('clientChat');
+            document.getElementById('msgInput').focus();
+            startClientPoll();
+            startClientUserPoll();
+        } else {
+            showError('cError', data.message);
+        }
+    } catch (e) {
+        showError('cError', 'Connection failed');
+    }
+    btn.disabled = false; btn.textContent = 'Connect';
+}
+
+function startClientPoll() {
+    if (cPoll) clearInterval(cPoll);
+    cPoll = setInterval(pollClient, 500);
+}
+
+function startClientUserPoll() {
+    if (cuPoll) clearInterval(cuPoll);
+    cuPoll = setInterval(pollClientUsers, 3000);
+    pollClientUsers();
+}
+
+async function pollClient() {
+    try {
+        const res = await fetch('/api/client/messages?since=' + cIdx + '&session=' + clientSession);
+        const data = await res.json();
+        if (!data.connected && cIdx > 0) {
+            clearInterval(cPoll);
+            clearInterval(cuPoll);
+            toast('Disconnected from server', 'error');
+            showView('clientSetup');
+            return;
+        }
+        data.messages.forEach(m => {
+            if (m.type === 'history')      addChatMsg('history', m.content);
+            else if (m.type === 'system')  addChatMsg('system', m.content);
+            else                           addChatMsg('incoming', m.content);
+        });
+        cIdx = data.next;
+    } catch (e) {}
+}
+
+async function pollClientUsers() {
+    try {
+        const res = await fetch('/api/client/users?session=' + clientSession);
+        const data = await res.json();
+        const list = document.getElementById('clientUserList');
+        if (!data.users.length) {
+            list.innerHTML = '<div class="empty-users">No users online</div>';
+        } else {
+            list.innerHTML = data.users.map(u =>
+                '<div class="user-item" onclick="dmUser(\'' + u.replace(/'/g, "\\'") + '\')">' +
+                '<div class="dot"></div><span>' + u + '</span></div>'
+            ).join('');
+        }
+    } catch (e) {}
+}
+
+function dmUser(username) {
+    const input = document.getElementById('msgInput');
+    input.value = '/msg ' + username + ' ';
+    input.focus();
+}
+
+async function sendMsg() {
+    const input = document.getElementById('msgInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    // local-only commands
+    if (msg === '/quit')  { clientDisconnect(); return; }
+    if (msg === '/clear') { clearChat(); return; }
+    if (msg === '/help')  { toggleHelp(); return; }
+
+    // show own message for normal text
+    if (!msg.startsWith('/')) addChatMsg('outgoing', msg);
+
+    await fetch('/api/client/send', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg, session: clientSession})
+    });
+}
+
+async function uploadFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    form.append('session', clientSession);
+    toast('Uploading ' + file.name + ' …');
+    try {
+        const res = await fetch('/api/client/upload', {method: 'POST', body: form});
+        const data = await res.json();
+        toast(data.success ? '✅ ' + data.message : '❌ ' + data.message, data.success ? 'success' : 'error');
+    } catch (e) { toast('Upload failed', 'error'); }
+    input.value = '';
+}
+
+async function clientDisconnect() {
+    clearInterval(cPoll);
+    clearInterval(cuPoll);
+    await fetch('/api/client/disconnect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session: clientSession})
+    });
+    clientSession = null;
+    showView('modeSelect');
+}
+
+/* ═══════════════════════════════════════
+   SERVER MODE
+   ═══════════════════════════════════════ */
+let sPoll = null, sIdx = 0, uPoll = null;
+
+async function serverStart() {
+    const btn = document.getElementById('sBtn');
+    btn.disabled = true; btn.textContent = 'Starting…';
+    hideError('sError');
+
+    try {
+        const res = await fetch('/api/server/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                host: document.getElementById('sHost').value,
+                port: parseInt(document.getElementById('sPort').value)
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('sInfo').textContent = '— ' + data.message;
+            if (!data.rejoined) {
+                document.getElementById('logArea').innerHTML = '';
+                sIdx = 0;
+            }
+            showView('serverDash');
+            startServerPoll();
+            if (!data.rejoined) loadHistory();
+        } else {
+            showError('sError', data.message);
+        }
+    } catch (e) { showError('sError', 'Failed to start server'); }
+    btn.disabled = false; btn.textContent = 'Start Server';
+}
+
+async function loadHistory() {
+    try {
+        const res = await fetch('/api/server/history');
+        const data = await res.json();
+        if (data.history.length) {
+            addLogEntry('system', '📜 Chat history (' + data.history.length + ' messages):');
+            data.history.forEach(h => addLogEntry('message', '[' + h.timestamp + '] ' + h.message));
+            addLogEntry('system', '── end of history ──');
+        }
+    } catch (e) {}
+}
+
+function startServerPoll() {
+    if (sPoll) clearInterval(sPoll);
+    if (uPoll) clearInterval(uPoll);
+    sPoll = setInterval(pollServer, 500);
+    uPoll = setInterval(pollUsers, 2000);
+    pollUsers();
+}
+
+async function pollServer() {
+    try {
+        const res = await fetch('/api/server/logs?since=' + sIdx);
+        const data = await res.json();
+        data.logs.forEach(l => addLogEntry(l.type, l.content));
+        sIdx = data.next;
+    } catch (e) {}
+}
+
+async function pollUsers() {
+    try {
+        const res = await fetch('/api/server/users');
+        const data = await res.json();
+        const list = document.getElementById('userList');
+        if (!data.users.length) {
+            list.innerHTML = '<div class="empty-users">No users connected</div>';
+        } else {
+            list.innerHTML = data.users.map(u =>
+                '<div class="user-item"><div class="dot"></div><span>' + u + '</span></div>'
+            ).join('');
+        }
+    } catch (e) {}
+}
+
+async function serverBroadcast() {
+    const input = document.getElementById('bcInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    await fetch('/api/server/broadcast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg})
+    });
+}
+
+async function openUploads() {
+    try {
+        const res = await fetch('/api/server/open-uploads', {method: 'POST'});
+        const data = await res.json();
+        if (!data.success) toast('Failed to open uploads folder', 'error');
+    } catch (e) { toast('Failed to open uploads folder', 'error'); }
+}
+
+async function serverStop() {
+    clearInterval(sPoll); clearInterval(uPoll);
+    await fetch('/api/server/stop', {method: 'POST'});
+    toast('Server stopped');
+    showView('modeSelect');
+}
+</script>
+</body>
+</html>

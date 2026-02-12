@@ -194,6 +194,9 @@ class ChatServer:
                         self.handle_file_transfer(client_socket, message)
                     else:
                         self.handle_command(client_socket, message)
+                        # /quit already removed the client, stop the loop
+                        if message == "/quit":
+                            return
                 else:
                     # Normal message
                     timestamp = self.get_timestamp()
