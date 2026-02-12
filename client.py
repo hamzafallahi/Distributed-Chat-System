@@ -2,6 +2,7 @@ import socket
 import threading
 import sys
 import os
+import time
 
 class ChatClient:
     def __init__(self, host='localhost', port=12345):
@@ -10,6 +11,8 @@ class ChatClient:
         self.socket = None
         self.nickname = None
         self.running = False
+        self.receiving_allowed = threading.Event()
+        self.receiving_allowed.set()  # Initially allow receiving
         
     def connect(self):
         """Connect to the chat server"""
@@ -18,10 +21,13 @@ class ChatClient:
             self.socket.connect((self.host, self.port))
             self.running = True
             
-            # Authentication
+            # Authentication (uses blocking recv, no timeout needed)
             if not self.authenticate():
                 print("❌ Authentication failed. Disconnecting...")
                 sys.exit(1)
+            
+            # Set timeout for receive loop (prevents blocking forever)
+            self.socket.settimeout(0.5)
             
             print(f"✅ Connected to server {self.host}:{self.port}")
             print(f"👤 You are connected as: {self.nickname}")
@@ -91,7 +97,19 @@ class ChatClient:
         """Receive messages from the server"""
         while self.running:
             try:
-                message = self.socket.recv(1024).decode('utf-8')
+                # Wait if file transfer is happening (receiving_allowed will be cleared)
+                self.receiving_allowed.wait()
+                
+                # Check again if we should stop
+                if not self.running:
+                    break
+                
+                try:
+                    message = self.socket.recv(1024).decode('utf-8')
+                except socket.timeout:
+                    # Timeout is expected, just loop and check event again
+                    continue
+                    
                 if message:
                     # Filter out file transfer protocol messages
                     if message.startswith("[FILE]"):
@@ -181,41 +199,70 @@ class ChatClient:
             filename = os.path.basename(filepath)
             file_size = os.path.getsize(filepath)
             
-            # Send file command
-            self.socket.send(f"/file {filename}".encode('utf-8'))
+            # Pause the receive thread during file transfer
+            self.receiving_allowed.clear()
             
-            # Wait for ready signal
-            response = self.socket.recv(1024).decode('utf-8')
-            if response != "[FILE]FILE_READY":
-                print(f"❌ Server not ready: {response}")
-                return
+            # Give receive thread time to notice and block on the event
+            # (it may be in the middle of a recv() call)
+            time.sleep(0.6)  # Longer than socket timeout (0.5s)
             
-            # Send file size
-            self.socket.send(str(file_size).encode('utf-8'))
-            
-            # Wait for acknowledgment
-            ack = self.socket.recv(1024).decode('utf-8')
-            if ack != "[FILE]FILE_SIZE_OK":
-                print("❌ Server did not acknowledge file size")
-                return
-            
-            # Send file data
-            print(f"📤 Uploading {filename} ({file_size} bytes)...")
-            with open(filepath, 'rb') as f:
-                sent = 0
-                while sent < file_size:
-                    chunk = f.read(4096)
-                    if not chunk:
-                        break
-                    self.socket.send(chunk)
-                    sent += len(chunk)
-            
-            # Wait for confirmation
-            confirm = self.socket.recv(1024).decode('utf-8')
-            if confirm.startswith("[FILE]"):
-                print(f"\n{confirm[6:]}\n")  # Remove [FILE] prefix
-            else:
-                print(f"\n{confirm}\n")
+            try:
+                # Send file command
+                self.socket.send(f"/file {filename}".encode('utf-8'))
+                
+                # Wait for ready signal (with timeout retry)
+                response = None
+                while not response:
+                    try:
+                        response = self.socket.recv(1024).decode('utf-8')
+                    except socket.timeout:
+                        continue
+                        
+                if response != "[FILE]FILE_READY":
+                    print(f"❌ Server not ready: {response}")
+                    return
+                
+                # Send file size
+                self.socket.send(str(file_size).encode('utf-8'))
+                
+                # Wait for acknowledgment (with timeout retry)
+                ack = None
+                while not ack:
+                    try:
+                        ack = self.socket.recv(1024).decode('utf-8')
+                    except socket.timeout:
+                        continue
+                        
+                if ack != "[FILE]FILE_SIZE_OK":
+                    print("❌ Server did not acknowledge file size")
+                    return
+                
+                # Send file data
+                print(f"📤 Uploading {filename} ({file_size} bytes)...")
+                with open(filepath, 'rb') as f:
+                    sent = 0
+                    while sent < file_size:
+                        chunk = f.read(4096)
+                        if not chunk:
+                            break
+                        self.socket.send(chunk)
+                        sent += len(chunk)
+                
+                # Wait for confirmation (with timeout retry)
+                confirm = None
+                while not confirm:
+                    try:
+                        confirm = self.socket.recv(1024).decode('utf-8')
+                    except socket.timeout:
+                        continue
+                        
+                if confirm.startswith("[FILE]"):
+                    print(f"\n{confirm[6:]}\n")  # Remove [FILE] prefix
+                else:
+                    print(f"\n{confirm}\n")
+            finally:
+                # Resume the receive thread
+                self.receiving_allowed.set()
             
         except Exception as e:
             print(f"❌ Error sending file: {e}")
