@@ -2,6 +2,7 @@
 
 A real-time multi-client TCP chat application built with Python sockets and threading. Features user authentication, public/private messaging, file sharing, persistent chat history, and a server admin console. No external dependencies — runs entirely on the Python standard library.
 
+![Repo Views](https://komarev.com/ghpvc/?username=hamzafallahi&repo=Distributed-Chat-System)
 ---
 
 ## Table of Contents
