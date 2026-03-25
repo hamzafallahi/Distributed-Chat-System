@@ -2,6 +2,7 @@
 
 A real-time multi-client TCP chat application built with Python sockets and threading. Features user authentication, public/private messaging, file sharing, persistent chat history, a server admin console, and a modern web UI. The console-based client/server runs entirely on the Python standard library, while the web UI requires Flask.
 
+![Repo Views](https://views.whatilearened.today/views/github/hamzafallahi/Distributed-Chat-System.svg)
 ---
 
 ## Table of Contents
