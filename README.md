@@ -1,6 +1,6 @@
 # Distributed Chat System
 
-A real-time multi-client TCP chat application built with Python sockets and threading. Features user authentication, public/private messaging, file sharing, persistent chat history, and a server admin console. No external dependencies — runs entirely on the Python standard library.
+A real-time multi-client TCP chat application built with Python sockets and threading. Features user authentication, public/private messaging, file sharing, persistent chat history, and a server admin console. No external dependencies  runs entirely on the Python standard library.
 
 ![Repo Views](https://views.whatilearened.today/views/github/hamzafallahi/Distributed-Chat-System.svg)
 ---
@@ -43,7 +43,7 @@ A real-time multi-client TCP chat application built with Python sockets and thre
 ## Prerequisites
 
 - **Python 3.6+**
-- No external packages — uses only the standard library (`socket`, `threading`, `json`, `os`, `sys`, `datetime`).
+- No external packages  uses only the standard library (`socket`, `threading`, `json`, `os`, `sys`, `datetime`).
 
 ---
 
@@ -51,8 +51,8 @@ A real-time multi-client TCP chat application built with Python sockets and thre
 
 ```
 project system dis/
-├── serveur.py            # Chat server — manages connections, auth, messaging, file storage
-├── client.py             # Chat client — connects to server, sends/receives messages and files
+├── serveur.py            # Chat server  manages connections, auth, messaging, file storage
+├── client.py             # Chat client  connects to server, sends/receives messages and files
 ├── users.json            # User credentials database (username + password)
 ├── chat_history.json     # Persistent message history (auto-created, keeps last 100 messages)
 ├── uploads/              # Uploaded files are stored here as <username>_<filename> (auto-created)
@@ -115,7 +115,7 @@ After connecting you'll see the recent chat history and can start typing message
 
 ### 3. Connect More Clients
 
-Repeat step 2 in additional terminal windows. Each client must log in with a **different** account — duplicate logins are rejected.
+Repeat step 2 in additional terminal windows. Each client must log in with a **different** account  duplicate logins are rejected.
 
 ### 4. Stop Everything
 
@@ -140,7 +140,7 @@ Users are defined in `users.json`:
 
 **To add a new user:** add a new object to the `users` array and **restart the server**.
 
-> ⚠️ Passwords are stored in plain text. This is a demo project — do not use real passwords.
+> ⚠️ Passwords are stored in plain text. This is a demo project  do not use real passwords.
 
 ---
 
@@ -220,7 +220,7 @@ Client                              Server
 5. Server saves the file to `uploads/<username>_<filename>`.
 6. Server confirms to the sender and broadcasts a notification to all other clients.
 
-A `threading.Lock` (`recv_lock`) on the client ensures the receive thread doesn't intercept the file protocol messages during this handshake — without it, the client would freeze.
+A `threading.Lock` (`recv_lock`) on the client ensures the receive thread doesn't intercept the file protocol messages during this handshake  without it, the client would freeze.
 
 ---
 
@@ -278,7 +278,7 @@ If authentication fails, the server responds with `AUTH_FAILED`, `ALREADY_CONNEC
 | Accept thread | Listens for new TCP connections |
 | 1 thread per client | Handles authentication, then message loop |
 
-All threads share `clients`, `nicknames`, and `connected_users` — protected by a `threading.Lock`.
+All threads share `clients`, `nicknames`, and `connected_users`  protected by a `threading.Lock`.
 
 **Client (`client.py`):**
 | Thread | Purpose |
@@ -364,7 +364,7 @@ self.uploads_dir = 'uploads'  # change to any path
 | `Cannot connect to server` | Server not running or wrong IP/port | Make sure `serveur.py` is running. Check the address and port. |
 | `This user is already connected!` | Duplicate login | `/quit` from the other session first, or use a different account. |
 | `Incorrect credentials!` | Wrong username or password | Check `users.json`. Credentials are case-sensitive. |
-| Client freezes during `/file` | Race condition (old client code) | Make sure `client.py` has the `recv_lock` fix — the receive thread must pause during file transfer. |
+| Client freezes during `/file` | Race condition (old client code) | Make sure `client.py` has the `recv_lock` fix  the receive thread must pause during file transfer. |
 | `File not found` | Wrong path | Use the full absolute path. Verify the file exists. |
 | `Address already in use` on server | Port still held by a previous run | Wait a few seconds, or kill the old process: `netstat -ano \| findstr :12345` then `taskkill /PID <pid> /F`. |
 | Connection suddenly drops | Network issue or server shut down | Restart the client. Check if the server is still running. |
